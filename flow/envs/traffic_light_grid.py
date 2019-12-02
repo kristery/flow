@@ -3,7 +3,7 @@
 These environments are used to train traffic lights to regulate traffic flow
 through an n x m traffic light grid.
 """
-
+import time
 import numpy as np
 import re
 
@@ -168,6 +168,7 @@ class TrafficLightGridEnv(Env):
 
         # check whether the action space is meant to be discrete or continuous
         self.discrete = env_params.additional_params.get("discrete", False)
+        self.waiting_time = {}
 
     @property
     def action_space(self):
@@ -238,6 +239,9 @@ class TrafficLightGridEnv(Env):
         return np.array(state)
 
     def _apply_rl_actions(self, rl_actions):
+        #print('actions:', rl_actions)
+        #print('status:', self.currently_yellow)
+        #print('direction:', self.direction.flatten().tolist())
         """See class definition."""
         # check if the action space is discrete
         if self.discrete:
@@ -251,6 +255,7 @@ class TrafficLightGridEnv(Env):
             rl_mask = rl_actions > 0.0
 
         for i, action in enumerate(rl_mask):
+            #print(self.k.traffic_light.get_state(node_id='center{}'.format(i)))
             if self.currently_yellow[i] == 1:  # currently yellow
                 self.last_change[i] += self.sim_step
                 # Check if our timer has exceeded the yellow phase, meaning it
@@ -278,11 +283,39 @@ class TrafficLightGridEnv(Env):
                     self.last_change[i] = 0.0
                     self.direction[i] = not self.direction[i]
                     self.currently_yellow[i] = 1
+                
+                ### in case the traffic light changed by the simulator
+                else:
+                    if self.direction[i] == 0:
+                        self.k.traffic_light.set_state(
+                                node_id='center{}'.format(i),
+                                state='GrGr')
+                    else:
+                        self.k.traffic_light.set_state(
+                                node_id='center{}'.format(i),
+                                state='rGrG')
+        self.update_waiting_time()
+
+    def update_waiting_time(self):
+        vel = self.k.vehicle.get_ids()
+        vel = [v for v in vel if self.k.vehicle.get_speed(v) < 0.1]
+        #print(self.k.vehicle.get_speed(vel))
+        for v in self.waiting_time:
+            if v not in vel:
+                self.waiting_time[v] = 0.
+        for v in vel:
+            try:
+                self.waiting_time[v] += 1.
+            except:
+                self.waiting_time[v] = 1.
+        
 
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
         return - rewards.min_delay_unscaled(self) \
-            - rewards.boolean_action_penalty(rl_actions >= 0.5, gain=1.0)
+            - rewards.boolean_action_penalty(rl_actions >= 0.5, gain=1.0) \
+            - rewards.waiting_penalty(self, gain=1.0)
+
 
     # ===============================
     # ============ UTILS ============
@@ -656,6 +689,7 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
         speeds = []
         dist_to_intersec = []
         edge_number = []
+        wait_time = []
         max_speed = max(
             self.k.network.speed_limit(edge)
             for edge in self.k.network.get_edge_list())
@@ -686,13 +720,19 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
                     [self._convert_edge(self.k.vehicle.get_edge(veh_id)) /
                      (self.k.network.network.num_edges - 1)
                      for veh_id in observed_ids]
+                wait_time += [
+                    self.waiting_time[vid]
+                    if vid in self.waiting_time else 0
+                    for vid in observed_ids
+                ]
 
                 if len(observed_ids) < self.num_observed:
                     diff = self.num_observed - len(observed_ids)
                     speeds += [0] * diff
                     dist_to_intersec += [0] * diff
                     edge_number += [0] * diff
-
+                    wait_time += [0] * diff
+    
         # now add in the density and average velocity on the edges
         density = []
         velocity_avg = []
@@ -711,8 +751,13 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
         self.observed_ids = all_observed_ids
         return np.array(
             np.concatenate([
-                speeds, dist_to_intersec, edge_number, density, velocity_avg,
-                self.last_change.flatten().tolist(),
+                speeds, 
+                #dist_to_intersec, 
+                edge_number,
+                wait_time,
+                #density, 
+                velocity_avg,
+                #self.last_change.flatten().tolist(),
                 self.direction.flatten().tolist(),
                 self.currently_yellow.flatten().tolist()
             ]))
@@ -722,9 +767,17 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
         if self.env_params.evaluate:
             return - rewards.min_delay_unscaled(self)
         else:
-            return (- rewards.min_delay_unscaled(self) +
-                    rewards.penalize_standstill(self, gain=0.2))
-
+            """
+            print('delay penalty:', -rewards.min_delay_unscaled(self))
+            print('standstill penalty:', rewards.penalize_standstill(self, gain=0.2))
+            print('action penalty:', -rewards.boolean_action_penalty(rl_actions >= 0.5, gain=0.2))
+            """
+            #return (- rewards.min_delay_unscaled(self) +
+            #        rewards.penalize_standstill(self, gain=0.2))
+            return (- rewards.min_delay_unscaled(self)
+                    - rewards.boolean_action_penalty(rl_actions >= 0.5, gain=0.01)
+                    - rewards.waiting_penalty(self, gain=0.01))
+                    
     def additional_command(self):
         """See class definition."""
         # specify observed vehicles

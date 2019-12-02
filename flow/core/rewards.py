@@ -191,6 +191,7 @@ def min_delay_unscaled(env):
         reward value
     """
     vel = np.array(env.k.vehicle.get_speed(env.k.vehicle.get_ids()))
+    #print(len(env.k.vehicle.get_ids()))
 
     vel = vel[vel >= -1e-6]
     v_top = max(
@@ -204,6 +205,19 @@ def min_delay_unscaled(env):
     cost = time_step * sum((v_top - vel) / v_top)
     return cost / (env.k.vehicle.num_vehicles + eps)
 
+def waiting_penalty(env, gain=1):
+    ids = env.k.vehicle.get_ids()
+    total_wait_time = 0.
+    total_veh = 0
+    for vel in ids:
+        try:
+            total_veh += 1
+            total_wait_time += env.waiting_time[vel]
+        except:
+            pass
+    print(total_veh)
+    return total_wait_time / total_veh * gain
+    
 
 def penalize_standstill(env, gain=1):
     """Reward function that penalizes vehicle standstill.
