@@ -215,7 +215,7 @@ def waiting_penalty(env, gain=1):
             total_wait_time += env.waiting_time[vel]
         except:
             pass
-    print(total_veh)
+    #print(total_veh)
     return total_wait_time / total_veh * gain
     
 

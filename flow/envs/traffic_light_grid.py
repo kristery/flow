@@ -276,7 +276,7 @@ class TrafficLightGridEnv(Env):
                     self.lc_green[i] = 0.0
             else:
                 self.lc_green[i] += self.sim_step
-                if action and self.lc_green[i] >= self.min_switch_time:
+                if action and self.lc_green[i] >= 3 * self.min_switch_time:
                     if self.direction[i] == 0:
                         self.k.traffic_light.set_state(
                             node_id='center{}'.format(i),
@@ -680,7 +680,7 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
             high=1,
             shape=(3 * 4 * self.num_observed * self.num_traffic_lights +
                    1 * len(self.k.network.get_edge_list()) +
-                   2 * self.num_traffic_lights,),
+                   4 * self.num_traffic_lights,),
             dtype=np.float32)
         return tl_box
 
