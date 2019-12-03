@@ -145,6 +145,9 @@ class TrafficLightGridEnv(Env):
         # value 0 indicates that the intersection is in a red-green state.
         self.currently_yellow = np.zeros((self.rows * self.cols, 1))
 
+        # last change signal for green light
+        self.lc_green = np.zeros((self.rows * self.cols, 1))
+
         # when this hits min_switch_time we change from yellow to red
         # the second column indicates the direction that is currently being
         # allowed to flow. 0 is flowing top to bottom, 1 is left to right
@@ -270,8 +273,10 @@ class TrafficLightGridEnv(Env):
                             node_id='center{}'.format(i),
                             state='rGrG')
                     self.currently_yellow[i] = 0
+                    self.lc_green[i] = 0.0
             else:
-                if action:
+                self.lc_green[i] += self.sim_step
+                if action and self.lc_green[i] >= self.min_switch_time:
                     if self.direction[i] == 0:
                         self.k.traffic_light.set_state(
                             node_id='center{}'.format(i),
@@ -674,8 +679,8 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
             low=0.,
             high=1,
             shape=(3 * 4 * self.num_observed * self.num_traffic_lights +
-                   2 * len(self.k.network.get_edge_list()) +
-                   3 * self.num_traffic_lights,),
+                   1 * len(self.k.network.get_edge_list()) +
+                   2 * self.num_traffic_lights,),
             dtype=np.float32)
         return tl_box
 
@@ -757,7 +762,8 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
                 wait_time,
                 #density, 
                 velocity_avg,
-                #self.last_change.flatten().tolist(),
+                self.last_change.flatten().tolist(),
+                self.lc_green.flatten().tolist(),
                 self.direction.flatten().tolist(),
                 self.currently_yellow.flatten().tolist()
             ]))
