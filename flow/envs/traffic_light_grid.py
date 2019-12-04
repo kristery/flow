@@ -678,9 +678,9 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
         tl_box = Box(
             low=0.,
             high=1,
-            shape=(3 * 4 * self.num_observed * self.num_traffic_lights +
-                   1 * len(self.k.network.get_edge_list()) +
-                   4 * self.num_traffic_lights,),
+            shape=(4 * 4 * self.num_observed * self.num_traffic_lights +
+                   0 * len(self.k.network.get_edge_list()) +
+                   3 * self.num_traffic_lights,),
             dtype=np.float32)
         return tl_box
 
@@ -703,6 +703,7 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
                        grid_array["inner_length"])
         all_observed_ids = []
 
+        print(self.k.network.get_edge_list())
         for _, edges in self.network.node_mapping:
             for edge in edges:
                 observed_ids = \
@@ -754,16 +755,25 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
                 density += [0]
                 velocity_avg += [0]
         self.observed_ids = all_observed_ids
+        
+        lc_green = [0. if item <= 3 * self.min_switch_time else 1.
+                        for item in self.lc_green.flatten().tolist()]
+
         return np.array(
             np.concatenate([
+                # for each intersection 4 * observed_num 
                 speeds, 
-                #dist_to_intersec, 
+                dist_to_intersec, 
                 edge_number,
                 wait_time,
+        
+                # number of edges
                 #density, 
-                velocity_avg,
-                self.last_change.flatten().tolist(),
-                self.lc_green.flatten().tolist(),
+                #velocity_avg,
+                
+                # for each traffic light
+                #self.last_change.flatten().tolist(),
+                lc_green,
                 self.direction.flatten().tolist(),
                 self.currently_yellow.flatten().tolist()
             ]))
@@ -781,7 +791,6 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
             #return (- rewards.min_delay_unscaled(self) +
             #        rewards.penalize_standstill(self, gain=0.2))
             return (- rewards.min_delay_unscaled(self)
-                    - rewards.boolean_action_penalty(rl_actions >= 0.5, gain=0.01)
                     - rewards.waiting_penalty(self, gain=0.01))
                     
     def additional_command(self):
