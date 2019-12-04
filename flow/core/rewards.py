@@ -219,6 +219,14 @@ def waiting_penalty(env, gain=1):
     return total_wait_time / total_veh * gain
     
 
+def shortgreen_penalty(env, action, gain=1):
+    penalty = 0.
+    for idx in range(len(env.lc_green)):
+        if env.lc_green[idx] < 3 * env.min_switch_time and action[idx] > 0.5:
+            penalty += 1.
+    return gain * penalty
+
+
 def penalize_standstill(env, gain=1):
     """Reward function that penalizes vehicle standstill.
 

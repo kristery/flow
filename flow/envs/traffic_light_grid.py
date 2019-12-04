@@ -276,7 +276,8 @@ class TrafficLightGridEnv(Env):
                     self.lc_green[i] = 0.0
             else:
                 self.lc_green[i] += self.sim_step
-                if action and self.lc_green[i] >= 3 * self.min_switch_time:
+                #if action and self.lc_green[i] >= 3 * self.min_switch_time:
+                if action:
                     if self.direction[i] == 0:
                         self.k.traffic_light.set_state(
                             node_id='center{}'.format(i),
@@ -703,7 +704,6 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
                        grid_array["inner_length"])
         all_observed_ids = []
 
-        print(self.k.network.get_edge_list())
         for _, edges in self.network.node_mapping:
             for edge in edges:
                 observed_ids = \
@@ -791,7 +791,8 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
             #return (- rewards.min_delay_unscaled(self) +
             #        rewards.penalize_standstill(self, gain=0.2))
             return (- rewards.min_delay_unscaled(self)
-                    - rewards.waiting_penalty(self, gain=0.01))
+                    - rewards.waiting_penalty(self, gain=0.01)
+                    - rewards.shortgreen_penalty(self, rl_actions, gain=0.1))
                     
     def additional_command(self):
         """See class definition."""
