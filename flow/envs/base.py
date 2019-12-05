@@ -400,7 +400,14 @@ class Env(gym.Env):
         else:
             reward = self.compute_reward(rl_actions, fail=crash)
 
-        return next_observation, reward, done, infos
+        return next_observation, reward, done, self.info()
+
+    def info(self):
+        """
+        Gives information that if each agent should produce action
+        """
+        return
+
 
     def reset(self):
         """Reset the environment.
