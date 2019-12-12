@@ -148,6 +148,9 @@ class TrafficLightGridEnv(Env):
         # last change signal for green light
         self.lc_green = np.zeros((self.rows * self.cols, 1))
 
+        # give information that an action should be given 
+        self.give_action = np.zeros((self.rows * self.cols, 1))
+
         # when this hits min_switch_time we change from yellow to red
         # the second column indicates the direction that is currently being
         # allowed to flow. 0 is flowing top to bottom, 1 is left to right
@@ -172,6 +175,7 @@ class TrafficLightGridEnv(Env):
         # check whether the action space is meant to be discrete or continuous
         self.discrete = env_params.additional_params.get("discrete", False)
         self.waiting_time = {}
+        self.eval_time = {}
 
     @property
     def action_space(self):
@@ -264,6 +268,7 @@ class TrafficLightGridEnv(Env):
                 # Check if our timer has exceeded the yellow phase, meaning it
                 # should switch to red
                 if self.last_change[i] >= self.min_switch_time:
+                    self.give_action[i] = 1.
                     if self.direction[i] == 0:
                         self.k.traffic_light.set_state(
                             node_id='center{}'.format(i),
@@ -275,6 +280,7 @@ class TrafficLightGridEnv(Env):
                     self.currently_yellow[i] = 0
                     self.lc_green[i] = 0.0
             else:
+                self.give_action[i] = 0.
                 self.lc_green[i] += self.sim_step
                 #if action and self.lc_green[i] >= 3 * self.min_switch_time:
                 if action:
@@ -312,9 +318,10 @@ class TrafficLightGridEnv(Env):
         for v in vel:
             try:
                 self.waiting_time[v] += 1.
+                self.eval_time[v] += 1.
             except:
                 self.waiting_time[v] = 1.
-        
+                self.eval_time[v] = 1.
 
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
@@ -679,9 +686,9 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
         tl_box = Box(
             low=0.,
             high=1,
-            shape=(4 * 4 * self.num_observed * self.num_traffic_lights +
-                   0 * len(self.k.network.get_edge_list()) +
-                   1 * self.num_traffic_lights,),
+            shape=(4 * 4 * self.num_observed +
+                   1 * len(self.k.network.get_edge_list()) +
+                   1,),
             dtype=np.float32)
         return tl_box
 
@@ -756,7 +763,6 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
             idx += 1
 
         # now add in the density and average velocity on the edges
-        """
         density = []
         velocity_avg = []
         for edge in self.k.network.get_edge_list():
@@ -771,14 +777,17 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
             else:
                 density += [0]
                 velocity_avg += [0]
-        """
+        
         self.observed_ids = all_observed_ids
-      
+       
+        density = [density for _ in range(self.num_traffic_lights)]
         return np.concatenate((
             speeds,
             dist_to_intersec,
             edge_number,
             wait_time,
+
+            density,
 
             self.direction), axis=1)
         """
@@ -823,7 +832,7 @@ class TrafficLightGridPOEnv(TrafficLightGridEnv):
                     -np.array(ma_rewards.waiting_penalty(self, gain=0.01))).tolist()
 
     def info(self):
-        return (1. - self.currently_yellow).flatten().tolist()
+        return self.give_action.flatten().tolist()
 
     def additional_command(self):
         """See class definition."""
